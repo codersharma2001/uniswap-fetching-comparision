@@ -91,7 +91,6 @@ query getPoolData($poolAddress: String!) {
       name
       decimals
     }
-    feeTier
     liquidity
     sqrtPrice
   }
@@ -125,7 +124,6 @@ const fetchPoolData = async (poolAddress) => {
       poolAddress,
       token0,
       token1,
-      fee,
       liquidity,
       sqrtPriceX96,
       tick,
