@@ -73,7 +73,7 @@ const fetchPricewithSDKcore = async (addressFrom, addressTo, humanValue) => {
 };
 
 async function fetchusingContractData() {
-  console.time("Contract Data Fetch Time");
+  console.time("Uniswap V3 Pool Contract Data Fetch Time");
   const poolContract = new ethers.Contract(UNISWAP_V3_POOL_ADDRESS, IUniswapV3Pool, provider);
   const slot0 = await poolContract.slot0();
   const liquidity = await poolContract.liquidity();
@@ -95,12 +95,12 @@ async function fetchusingContractData() {
     priceOf10WETHInUSDC: ethers.utils.formatUnits(priceOf10WETHInUSDC, 6), 
     priceOf10WETHInUSDCWithSlippage: ethers.utils.formatUnits(priceOf10WETHInUSDCWithSlippage, 6) 
   };
-  console.timeEnd("Contract Data Fetch Time");
+  console.timeEnd("Uniswap V3 Pool Contract Data Fetch Time");
   return data;
 }
 
 async function fetchusingSdkData() {
-  console.time("SDK-Quoter Data Fetch Time");
+  console.time("Quoter-Contract Data Fetch Time");
   const addressFrom = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"; 
   const addressTo = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"; 
 
@@ -126,14 +126,13 @@ async function fetchusingSdkData() {
     .mul(ethers.BigNumber.from((1 - SLIPPAGE_TOLERANCE) * 1e6))
     .div(1e6);
 
-  console.timeEnd("SDK-Quoter Data Fetch Time");
+  console.timeEnd("Quoter-Contract Data Fetch Time");
   return {
     amount,
     amountWithSlippage: ethers.utils.formatUnits(amountWithSlippage.toString(), 6)
   };
 }
 
-// Fetching data from the subgraph
 const Query = gql`
 query getPoolData($poolAddress: String!) {
   pool(id: $poolAddress) {
@@ -212,8 +211,8 @@ async function main() {
     fetchPricewithSDKcore(addressFrom, addressTo, humanValue)
   ]);
 
-  console.log("Contract Data:", contractData);
-  console.log("SDK Data:", sdkData);
+  console.log("Uniswap V3 Pool Contract Data:", contractData);
+  console.log("Quoter Contract Data:", sdkData);
   console.log("Subgraph Data:", subgraphData);
   console.log("SDK Core Data:", sdkCoreData);
 }
