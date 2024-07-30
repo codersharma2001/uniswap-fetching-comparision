@@ -1,58 +1,68 @@
 import { ethers } from "ethers";
-import QuoterABI from "@uniswap/v3-periphery/artifacts/contracts/lens/Quoter.sol/Quoter.json" assert { type: "json" };
-
-// ERC-20 ABI (minimal for fetching name, symbol, and decimals)
-const ERC20_ABI = [
-    "function name() view returns (string)",
-    "function symbol() view returns (string)",
-    "function decimals() view returns (uint8)"
-];
+import { Token } from "@uniswap/sdk-core";
+import JSBI from "jsbi";
 
 const provider = new ethers.providers.JsonRpcProvider(
     "https://eth-mainnet.g.alchemy.com/v2/xnNWnpBMlZABF_rBFjTf2aKBL-N3RkJN"
 );
 
-const fetchPrice = async (addressFrom, addressTo, humanValue) => {
-    const QUOTER_CONTRACT_ADDRESS = "0xb27308f9F90D607463bb33eA1BeBb41C27CE5AB6";
+async function getPoolState(poolContract) {
+    const liquidity = await poolContract.liquidity();
+    const slot = await poolContract.slot0();
+    return {
+        liquidity: JSBI.BigInt(liquidity.toString()),
+        sqrtPriceX96: JSBI.BigInt(slot[0].toString()),
+        tick: slot[1],
+    };
+}
 
-    const quoterContract = new ethers.Contract(
-        QUOTER_CONTRACT_ADDRESS,
-        QuoterABI.abi,
+function getExecutionPrice(sqrtPriceX96, decimals0, decimals1) {
+    const Q96 = JSBI.exponentiate(JSBI.BigInt(2), JSBI.BigInt(96));
+    const Q192 = JSBI.exponentiate(Q96, JSBI.BigInt(2));
+    const priceX192 = JSBI.multiply(sqrtPriceX96, sqrtPriceX96);
+    const priceRatio = JSBI.toNumber(priceX192) / (JSBI.toNumber(Q192) * 10 ** 17);
+    const price = priceRatio * (10 ** (decimals0 - decimals1));
+    return price;
+}
+
+const fetchPrice = async (addressFrom, addressTo, humanValue) => {
+    const poolAddress = "0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8"; // Example pool address for WETH/USDC
+
+    const poolContract = new ethers.Contract(
+        poolAddress,
+        [
+            "function slot0() view returns (uint160 sqrtPriceX96, int24 tick, uint16 observationIndex, uint16 observationCardinality, uint16 observationCardinalityNext, uint8 feeProtocol, bool unlocked)",
+            "function liquidity() view returns (uint128)",
+            "function token0() view returns (address)",
+            "function token1() view returns (address)",
+            "function fee() view returns (uint24)",
+        ],
         provider
     );
-    const amountIn = ethers.utils.parseUnits("1", 18);
-    const quotedAmountOut = await quoterContract.callStatic.quoteExactInputSingle(
-        addressFrom,
-        addressTo,
-        3000,
-        amountIn.toString(),
-        0
-    );
-    const amount = ethers.utils.formatUnits(quotedAmountOut.toString(), 18) * 10 ** 13;
-    return amount;
-};
 
-const fetchTokenData = async (tokenAddress) => {
-    const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, provider);
-    const name = await tokenContract.name();
-    const symbol = await tokenContract.symbol();
-    const decimals = await tokenContract.decimals();
-    return { name, symbol, decimals };
+    const state = await getPoolState(poolContract);
+
+    const tokenFrom = new Token(1, addressFrom, 18, "WETH", "Wrapped Ether");
+    const tokenTo = new Token(1, addressTo, 6, "USDC", "USD Coin");
+
+
+    const executionPrice = getExecutionPrice(state.sqrtPriceX96, tokenFrom.decimals, tokenTo.decimals);
+    console.log(`Execution Price: ${executionPrice.toFixed(6)}`);
+
+
+    const quotedAmountOut = executionPrice.toFixed(6) * parseFloat(humanValue);
+    console.log(`Quoted Amount Out: ${quotedAmountOut} ${tokenTo.symbol}`);
+
+    return quotedAmountOut;
 };
 
 const main = async () => {
-    const addressFrom = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"; 
-    const addressTo = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"; 
+    const addressFrom = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"; // WETH
+    const addressTo = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"; // USDC
 
     const humanValue = "10";
     const result = await fetchPrice(addressFrom, addressTo, humanValue);
-    console.log(`Quoted Amount Out: ${result}`);
-
-    const fromTokenData = await fetchTokenData(addressFrom);
-    const toTokenData = await fetchTokenData(addressTo);
-
-    console.log(`From Token - Name: ${fromTokenData.name}, Symbol: ${fromTokenData.symbol}, Decimals: ${fromTokenData.decimals}`);
-    console.log(`To Token - Name: ${toTokenData.name}, Symbol: ${toTokenData.symbol}, Decimals: ${toTokenData.decimals}`);
+    console.log(`Quoted Amount Out: ${result} USDC`);
 };
 
 main().catch(console.error);
